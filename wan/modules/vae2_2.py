@@ -817,7 +817,9 @@ class WanVAE_(nn.Module):
         else:
             z = z / scale[1] + scale[0]
         iter_ = z.shape[2]
+        device = z.device
         x = self.conv2(z)
+        out = None
         for i in range(iter_):
             self._conv_idx = [0]
             if i == 0:
@@ -833,7 +835,15 @@ class WanVAE_(nn.Module):
                     feat_cache=self._feat_map,
                     feat_idx=self._conv_idx,
                 )
-                out = torch.cat([out, out_], 2)
+                # cat 时保证 out 在 GPU 上（可能刚从 CPU 移回）
+                out = torch.cat([out.to(device), out_], 2)
+                del out_
+            # 将累积的 out 放到 CPU，减轻 GPU 显存与碎片
+            if out is not None and out.device.type == "cuda":
+                out = out.cpu()
+            if (i + 1) % 5 == 0 and device.type == "cuda":
+                torch.cuda.empty_cache()
+        out = out.to(device)
         out = unpatchify(out, patch_size=2)
         self.clear_cache()
         return out
