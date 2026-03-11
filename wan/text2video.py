@@ -365,18 +365,19 @@ class WanT2V:
                 self.high_noise_model.cpu()
                 torch.cuda.empty_cache()
             if self.rank == 0:
+                latent = latents[0]
                 print("=+=" * 100)
-                print("latents :", latents)
+                print("latent :", latent)
                 print("x0 :", x0)
                 # videos = self.vae.decode(x0)
                 # 分块解码以避免 OOM
                 chunk_size = 8  # 可调整：4/6/8/12
                 video_chunks = []
-                T_latent = latents.shape[1]  # 时间维度长度，例如 13
+                T_latent = latent.shape[1]  # 时间维度长度，例如 13
 
                 for i in range(0, T_latent, chunk_size):
                     # 切出时间片段: (16, T, H, W) → (16, T_chunk, H, W)
-                    latent_chunk_no_batch = latents[:, i:i+chunk_size, :, :]
+                    latent_chunk_no_batch = latent[:, i:i+chunk_size, :, :]
                     # 添加 batch 维度: → (1, 16, T_chunk, H, W)
                     latent_chunk = latent_chunk_no_batch.unsqueeze(0)
 
