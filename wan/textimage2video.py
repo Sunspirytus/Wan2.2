@@ -398,7 +398,30 @@ class WanTI2V:
                 torch.cuda.synchronize()
                 torch.cuda.empty_cache()
             if self.rank == 0:
-                videos = self.vae.decode(x0)
+                print("=+=" * 100)
+                print("latents :", latents)
+                print("x0 :", x0)
+                # videos = self.vae.decode(x0)
+                # 分块解码以避免 OOM
+                chunk_size = 8  # 可调整：4/6/8/12
+                video_chunks = []
+                T_latent = latents.shape[1]  # 时间维度长度，例如 13
+
+                for i in range(0, T_latent, chunk_size):
+                    # 切出时间片段: (16, T, H, W) → (16, T_chunk, H, W)
+                    latent_chunk_no_batch = latents[:, i:i+chunk_size, :, :]
+                    # 添加 batch 维度: → (1, 16, T_chunk, H, W)
+                    latent_chunk = latent_chunk_no_batch.unsqueeze(0)
+
+                    with torch.no_grad():
+                        # VAE.decode 接收 List[Tensor]，每个 Tensor 为 (B, C, T, H, W)
+                        video_chunk = self.vae.decode([latent_chunk])  # 返回 (1, 3, T_out, H_out, W_out)
+
+                    video_chunks.append(video_chunk.cpu())
+                    torch.cuda.empty_cache()
+
+                # 拼接所有 chunk（沿时间维度 dim=2）
+                videos = torch.cat(video_chunks, dim=2)  # (1, 3, total_frames, H, W)
 
         del noise, latents
         del sample_scheduler
@@ -606,7 +629,30 @@ class WanTI2V:
                 torch.cuda.empty_cache()
 
             if self.rank == 0:
-                videos = self.vae.decode(x0)
+                print("=+=" * 100)
+                print("latents :", latent)
+                print("x0 :", x0)
+                # videos = self.vae.decode(x0)
+                # 分块解码以避免 OOM
+                chunk_size = 8  # 可调整：4/6/8/12
+                video_chunks = []
+                T_latent = latent.shape[1]  # 时间维度长度，例如 13
+
+                for i in range(0, T_latent, chunk_size):
+                    # 切出时间片段: (16, T, H, W) → (16, T_chunk, H, W)
+                    latent_chunk_no_batch = latent[:, i:i+chunk_size, :, :]
+                    # 添加 batch 维度: → (1, 16, T_chunk, H, W)
+                    latent_chunk = latent_chunk_no_batch.unsqueeze(0)
+
+                    with torch.no_grad():
+                        # VAE.decode 接收 List[Tensor]，每个 Tensor 为 (B, C, T, H, W)
+                        video_chunk = self.vae.decode([latent_chunk])  # 返回 (1, 3, T_out, H_out, W_out)
+
+                    video_chunks.append(video_chunk.cpu())
+                    torch.cuda.empty_cache()
+
+                # 拼接所有 chunk（沿时间维度 dim=2）
+                videos = torch.cat(video_chunks, dim=2)  # (1, 3, total_frames, H, W)
 
         del noise, latent, x0
         del sample_scheduler
